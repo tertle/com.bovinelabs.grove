@@ -60,7 +60,7 @@ Key features:
 - Support for graph nesting and reuse
 - Instance values
 - Variant configurations
-  
+
 ### Contexts
 
 Contexts are the runtime data container for Grove graphs providing access to entity component data. They implement the `IContext<T>` interface and serve as the bridge between your ECS data and graph execution.
@@ -202,7 +202,7 @@ This creates a clean separation between data that's meant for graph-internal log
 
 #### What is Graph State?
 
-Graph State is implemented using a `DynamicUntypedHashMap<short>` that allows you to store any unmanaged value type with a `short` key. 
+Graph State is implemented using a `DynamicUntypedHashMap<short>` that allows you to store any unmanaged value type with a `short` key.
 This hashmap persists between frames, allowing nodes to store and retrieve information as needed.
 
 #### When to Use Graph State
@@ -529,9 +529,9 @@ The active path is determined by the variant value assigned to an entity during 
    1. You can add more variant options by right-clicking the node and selecting Add Port
 3. You can set the default variant that the authoring component will use in the node inspector
 4. In your authoring component, assign the desired variant value for each entity
-   
+
 ![VariantSelection](Documentation~/Images/variants.png)
-   
+
 ### Editor Window
 
 The Editor Window provides the visual interface for creating and editing your graphs:
@@ -780,8 +780,56 @@ public partial struct MyGraphSystem : ISystem, ISystemStartStop
 While `IJobChunk` is used in this example, you could alternatively use `IJobEntity` in combination with `IJobEntityChunkBeginEnd` and `[EntityIndexInQuery]`.
 However, the `IJobChunk` approach is generally more straightforward for this use case.
 
-## AI Disclaimer
+### Debugging Nodes
 
-No AI was used in the development, design, or implementation of the BovineLabs Grove library itself - all code was written by a human.
-This documentation was written with the assistance of Claude AI by Anthropic.
-The AI was used solely to help organize and write the documentation based on provided code examples and specifications.
+Grove provides the ability to visualize node behavior and graph state during runtime. Debug nodes execute only in editor or development builds, making them perfect for validating behavior without affecting release performance.
+
+#### Setting Up Debug Methods
+
+To create a debug method for a node:
+
+1. Add a method with the `ExecuteNodeDebug` or `DataNodeDebug` attribute
+2. Optionally place the method inside `#if BL_DEBUG || UNITY_EDITOR` conditional compilation blocks to stop code reaching runtime
+3. Optionally add a ConfigVar to toggle specific visualizations
+
+```csharp
+// Regular node execution method
+[ExecuteNode((int)ExecutionType.MoveToRandomPoint)]
+public static void Execute(ref ActionMoveToRandomPointData data, in EntityContext entityContext, ref AIAgentContext context)
+{
+    // Normal execution code...
+}
+
+#if BL_DEBUG || UNITY_EDITOR
+// Debug visualization method
+[ConfigVar("ai.wander-distance", false, "Debug the wander distance from home")]
+private static readonly SharedStatic<bool> IsDebug = SharedStatic<bool>.GetOrCreate<bool, ActionMoveToRandomPointData>();
+
+[ExecuteNodeDebug((int)ExecutionType.MoveToRandomPoint)]
+public static void Debug(ref ActionMoveToRandomPointData data, in EntityContext entityContext, ref AIAgentContext context)
+{
+    if (!IsDebug.Data)
+    {
+        return;
+    }
+
+    var aiStates = context.GetState(entityContext.EntityIndexInChunk);
+    if (Hint.Unlikely(!aiStates.TryGetValue((short)AIStateKey.Home, out float3 home)))
+    {
+        return;
+    }
+
+    // Using Quill to draw the wander distance around the creatures home position
+    context.Drawer.Circle(home, math.up() * math.sqrt(data.Radius), Color.cyan);
+}
+#endif
+```
+
+#### Enabling Debug Visualization
+
+To use debug visualizations:
+
+1. Run in editor or in build with `BL_DEBUG` define
+2. Enable global debugging with the `graph.debug-enabled` config var
+3. Optionally in editor restrict debugging to only the selected entity in the hierarchy with `graph.debug-selected`
+4. Toggle specific debug visualizations using their dedicated config vars (like `ai.wander-distance`)
